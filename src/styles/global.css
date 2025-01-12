@@ -1,0 +1,63 @@
+/* src/styles/global.css */
+/* Tailwind’s base styles */
+@tailwind base;
+
+/* Tailwind’s component styles */
+@tailwind components;
+
+/* Tailwind’s utility classes */
+@tailwind utilities;
+
+.segmented-control {
+    display: flex;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.segmented-control__button {
+    flex: 1;
+    padding: 10px 20px;
+    border: none;
+    background-color: #ffffff;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.segmented-control__button--active {
+    background-color: #4caf50;
+    color: white;
+    font-weight: bold;
+}
+
+.segmented-control__button:not(:last-child) {
+    border-right: 1px solid #ccc;
+}
+
+.segmented-control__button:hover {
+    background-color: #e0e0e0;
+}
+
+.toggle-button {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+    margin-bottom: 1.2rem;
+}
+
+.toggle-button__option {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ccc;
+    cursor: pointer;
+}
+
+.toggle-button__option--active {
+    background-color: #4caf50;
+    color: white;
+    font-weight: bold;
+}
+
+.prescriptionLine {
+    font-size: 1.2rem;
+    margin-bottom: 1.2rem;
+}
