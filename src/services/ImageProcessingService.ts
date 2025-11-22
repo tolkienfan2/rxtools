@@ -78,7 +78,36 @@ export class ImageProcessingService {
             }
         }
 
-        return binary;
+        // 4. Erode to separate touching pills
+        const eroded = this.erode(binary, width, height);
+
+        return eroded;
+    }
+
+    private erode(binary: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+        const eroded = new Uint8ClampedArray(binary.length);
+        // Simple 3x3 structural element (cross shape)
+        //  0 1 0
+        //  1 1 1
+        //  0 1 0
+
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = y * width + x;
+                if (binary[idx] === 1) {
+                    // Check neighbors
+                    if (binary[idx - 1] === 1 &&       // Left
+                        binary[idx + 1] === 1 &&       // Right
+                        binary[idx - width] === 1 &&   // Top
+                        binary[idx + width] === 1) {   // Bottom
+                        eroded[idx] = 1;
+                    } else {
+                        eroded[idx] = 0;
+                    }
+                }
+            }
+        }
+        return eroded;
     }
 
     private getOtsuThreshold(grays: Uint8Array): number {

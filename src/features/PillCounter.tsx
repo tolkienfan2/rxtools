@@ -74,9 +74,9 @@ export const PillCounter: React.FC = () => {
     };
 
     const handleCapture = () => {
-        if (videoRef.current && canvasRef.current) {
+        if (videoRef.current) {
             const video = videoRef.current;
-            const canvas = canvasRef.current;
+            const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
 
