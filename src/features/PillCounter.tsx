@@ -5,7 +5,6 @@ export const PillCounter: React.FC = () => {
     const [imageSrc, setImageSrc] = useState<string | null>(null);
     const [points, setPoints] = useState<Point[]>([]);
     const [blobs, setBlobs] = useState<Blob[]>([]);
-    const [referenceSize, setReferenceSize] = useState<number>(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [isCalibrating, setIsCalibrating] = useState(false);
@@ -84,7 +83,6 @@ export const PillCounter: React.FC = () => {
         setImageSrc(null);
         setPoints([]);
         setBlobs([]);
-        setReferenceSize(0);
         setIsCalibrating(false);
         startCamera();
     };
@@ -103,7 +101,6 @@ export const PillCounter: React.FC = () => {
                 setIsProcessing(true);
                 processingService.processImage(imageSrc).then((result) => {
                     setBlobs(result.blobs);
-                    setReferenceSize(result.defaultReferenceSize);
 
                     // Initial calculation
                     const initialPoints = processingService.calculatePoints(result.blobs, result.defaultReferenceSize);
@@ -167,7 +164,6 @@ export const PillCounter: React.FC = () => {
             });
 
             if (clickedBlob) {
-                setReferenceSize(clickedBlob.size);
                 const newPoints = processingService.calculatePoints(blobs, clickedBlob.size);
                 setPoints(newPoints);
                 setIsCalibrating(false); // Exit calibration mode
@@ -238,8 +234,8 @@ export const PillCounter: React.FC = () => {
                                 <button
                                     onClick={() => setIsCalibrating(!isCalibrating)}
                                     className={`absolute bottom - 4 right - 4 px - 4 py - 2 rounded - md shadow - md transition - colors ${isCalibrating
-                                            ? 'bg-orange-500 text-white animate-pulse'
-                                            : 'bg-white text-gray-700 hover:bg-gray-100'
+                                        ? 'bg-orange-500 text-white animate-pulse'
+                                        : 'bg-white text-gray-700 hover:bg-gray-100'
                                         } `}
                                 >
                                     {isCalibrating ? 'Click a Single Pill' : 'Calibrate Size'}
