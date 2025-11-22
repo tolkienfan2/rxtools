@@ -47,34 +47,38 @@ export class ImageProcessingService {
             grays[i / 4] = avg;
         }
 
+        // 1b. Gaussian Blur to reduce noise
+        const blurred = this.gaussianBlur(grays, width, height);
+
         // 2. Otsu's Method to find optimal threshold
-        const threshold = this.getOtsuThreshold(grays);
+        const threshold = this.getOtsuThreshold(blurred);
 
         // 3. Create Binary Map
         // We need to determine if pills are lighter or darker than background.
         // Heuristic: Check the corners/borders. They are likely background.
         let backgroundIsLight = 0;
+        // Sample corners of blurred image
         const borderPixels = [
-            grays[0], grays[width - 1],
-            grays[width * (height - 1)], grays[width * height - 1]
+            blurred[0], blurred[width - 1],
+            blurred[width * (height - 1)], blurred[width * height - 1]
         ];
         // Sample more border pixels
         for (let x = 0; x < width; x += 10) {
-            if (grays[x] > threshold) backgroundIsLight++; else backgroundIsLight--;
-            if (grays[width * (height - 1) + x] > threshold) backgroundIsLight++; else backgroundIsLight--;
+            if (blurred[x] > threshold) backgroundIsLight++; else backgroundIsLight--;
+            if (blurred[width * (height - 1) + x] > threshold) backgroundIsLight++; else backgroundIsLight--;
         }
         for (let y = 0; y < height; y += 10) {
-            if (grays[y * width] > threshold) backgroundIsLight++; else backgroundIsLight--;
-            if (grays[y * width + width - 1] > threshold) backgroundIsLight++; else backgroundIsLight--;
+            if (blurred[y * width] > threshold) backgroundIsLight++; else backgroundIsLight--;
+            if (blurred[y * width + width - 1] > threshold) backgroundIsLight++; else backgroundIsLight--;
         }
 
         const invert = backgroundIsLight > 0; // If background is light (> threshold), we want dark pixels (<= threshold) to be 1 (objects)
 
-        for (let i = 0; i < grays.length; i++) {
+        for (let i = 0; i < blurred.length; i++) {
             if (invert) {
-                binary[i] = grays[i] <= threshold ? 1 : 0;
+                binary[i] = blurred[i] <= threshold ? 1 : 0;
             } else {
-                binary[i] = grays[i] > threshold ? 1 : 0;
+                binary[i] = blurred[i] > threshold ? 1 : 0;
             }
         }
 
@@ -108,6 +112,37 @@ export class ImageProcessingService {
             }
         }
         return eroded;
+    }
+
+    private gaussianBlur(data: Uint8Array, width: number, height: number): Uint8Array {
+        const output = new Uint8Array(data.length);
+        // 3x3 Gaussian kernel approximation
+        // 1 2 1
+        // 2 4 2
+        // 1 2 1
+        // Divisor = 16
+
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = y * width + x;
+
+                let sum = 0;
+                sum += data[idx - width - 1] * 1;
+                sum += data[idx - width] * 2;
+                sum += data[idx - width + 1] * 1;
+
+                sum += data[idx - 1] * 2;
+                sum += data[idx] * 4;
+                sum += data[idx + 1] * 2;
+
+                sum += data[idx + width - 1] * 1;
+                sum += data[idx + width] * 2;
+                sum += data[idx + width + 1] * 1;
+
+                output[idx] = sum / 16;
+            }
+        }
+        return output;
     }
 
     private getOtsuThreshold(grays: Uint8Array): number {
@@ -148,7 +183,7 @@ export class ImageProcessingService {
     private findBlobs(binary: Uint8ClampedArray, width: number, height: number): Point[] {
         const visited = new Uint8Array(width * height);
         const blobs: Point[] = [];
-        const minBlobSize = 30; // Slightly lower min size
+        const minBlobSize = 150; // Increased from 30 to 150 to ignore noise
         const maxBlobSize = width * height * 0.5; // Ignore massive blobs (likely background errors)
 
         for (let y = 0; y < height; y++) {
