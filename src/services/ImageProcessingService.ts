@@ -182,22 +182,61 @@ export class ImageProcessingService {
 
     private findBlobs(binary: Uint8ClampedArray, width: number, height: number): Point[] {
         const visited = new Uint8Array(width * height);
-        const blobs: Point[] = [];
-        const minBlobSize = 150; // Increased from 30 to 150 to ignore noise
-        const maxBlobSize = width * height * 0.5; // Ignore massive blobs (likely background errors)
+        const blobs: { size: number, center: Point }[] = [];
+        const minBlobSize = 100; // Minimum pixels to consider a pill (tuned down slightly from 150 to catch smaller pills)
+        const maxBlobSize = width * height * 0.5;
 
+        // 1. Find all blobs
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const idx = y * width + x;
                 if (binary[idx] === 1 && visited[idx] === 0) {
-                    const { size, center } = this.floodFill(binary, visited, width, height, x, y);
-                    if (size > minBlobSize && size < maxBlobSize) {
-                        blobs.push(center);
+                    const blob = this.floodFill(binary, visited, width, height, x, y);
+                    if (blob.size > minBlobSize && blob.size < maxBlobSize) {
+                        blobs.push(blob);
                     }
                 }
             }
         }
-        return blobs;
+
+        if (blobs.length === 0) return [];
+
+        // 2. Calculate Median Area
+        const sortedSizes = blobs.map(b => b.size).sort((a, b) => a - b);
+        const medianSize = sortedSizes[Math.floor(sortedSizes.length / 2)];
+
+        // Avoid division by zero or extremely small median
+        if (medianSize < minBlobSize) return blobs.map(b => b.center);
+
+        const finalPoints: Point[] = [];
+
+        // 3. Generate Points based on Area
+        blobs.forEach(blob => {
+            // Calculate how many pills fit in this blob
+            // We use Math.round to find the closest integer multiple
+            let count = Math.round(blob.size / medianSize);
+
+            // Ensure at least 1 pill if it passed the minBlobSize check
+            if (count < 1) count = 1;
+
+            // If it's a single pill, just add the center
+            if (count === 1) {
+                finalPoints.push(blob.center);
+            } else {
+                // If it's a clump, distribute points around the center
+                // This makes it obvious it counted multiple, and allows individual deletion
+                const radius = 15; // Distance from center
+                for (let i = 0; i < count; i++) {
+                    const angle = (i / count) * 2 * Math.PI;
+                    finalPoints.push({
+                        x: blob.center.x + radius * Math.cos(angle),
+                        y: blob.center.y + radius * Math.sin(angle)
+                    });
+                }
+            }
+        });
+
+        return finalPoints;
     }
 
     private floodFill(binary: Uint8ClampedArray, visited: Uint8Array, width: number, height: number, startX: number, startY: number) {
