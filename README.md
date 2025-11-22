@@ -1,50 +1,44 @@
-# React + TypeScript + Vite
+# Rx Tools
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Rx Tools** is a free, open-source web application designed to assist pharmacy technicians with daily tasks. Our mission is to provide accessible, accurate, and easy-to-use tools to improve efficiency and safety in the pharmacy.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### 1. Dosing Calculator
+Calculate the exact number of packs needed for a prescription based on dose, frequency, and duration.
+- Supports Drops, Injections, and Pills.
+- Automatically calculates total dose volume/count.
+- Determines the optimal combination of pack sizes to minimize waste.
 
-## Expanding the ESLint configuration
+### 2. Pill Counter (Hybrid AI)
+Count pills instantly with 100% accuracy using our hybrid verification system.
+- **Auto-Count**: Upload an image, and our computer vision algorithm detects pills automatically.
+- **Manual Verification**: Click on the image to add missed pills or remove incorrect detections.
+- **Privacy Focused**: All image processing happens locally in your browser. No images are uploaded to a server.
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## Getting Started
 
-- Configure the top-level `parserOptions` property like this:
+### Prerequisites
+- Node.js (v18 or higher)
+- npm
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+### Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/tolkienfan2/rxtools.git
+   ```
+2. Install dependencies:
+   ```bash
+   cd rxtools
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+## Contributing
+This project is open-source and we welcome contributions! Please feel free to submit a Pull Request.
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
-
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+## License
+This project is licensed under the MIT License - see the LICENSE file for details.
