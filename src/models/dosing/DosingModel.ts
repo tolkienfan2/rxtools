@@ -1,16 +1,27 @@
-import type { ActiveTab, Dosing, DropsDosing, InjectionDosing, PackSize, PillDosing, PrescriptionDetails, Prescription, Results } from './../../types';
-import { 
+import type { ActiveTab, Dosing, DropsDosing, InjectionDosing, PackSize, PillDosing, PrescriptionDetails, Prescription } from './../../types';
+
+export interface PackResult {
+    packSize: number;
+    units: string;
+    quantity: number;
+}
+
+export interface Results {
+    totalDose: number;
+    packsNeeded: PackResult[];
+}
+import {
     eyeDropPackSizes,
     earDropPackSizes,
     insulinPackSizes,
     ozempicPackSizes,
     tabletPackSizes,
     capsulePackSizes,
-    PrescriptionType, 
-    TabType, 
-    DROP_TYPES, 
-    INJECTION_TYPES, 
-    PILL_TYPES 
+    PrescriptionType,
+    TabType,
+    DROP_TYPES,
+    INJECTION_TYPES,
+    PILL_TYPES
 } from './constants';
 
 export class DosingModel {
@@ -121,15 +132,19 @@ export class DosingModel {
         this.finalPrescriptionDetails = details;
     }
 
-    calculateResults = () => {       
+    calculateResults = () => {
         const totalDose = this.finalPrescriptionDetails.reduce((acc, curr) => {
             return acc + curr.dose * curr.frequency * curr.duration;
         }, 0);
-        
-        const packsNeeded = this.selectedPackSizes.map((pack) => ({
-            packSize: pack.packSize,
-            units: pack.units,
-        })).filter((pack) => pack.packSize > totalDose);
+
+        const packsNeeded = this.selectedPackSizes.map((pack) => {
+            const quantity = Math.ceil(totalDose / pack.packSize);
+            return {
+                packSize: pack.packSize,
+                units: pack.units,
+                quantity: quantity
+            };
+        });
 
         this.results = { totalDose, packsNeeded };
     }

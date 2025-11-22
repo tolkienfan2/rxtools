@@ -81,11 +81,13 @@ export const DosingCalculator: React.FC = () => {
                     <h2 className="text-2xl font-bold mb-4">Results</h2>
                     {results ? (
                         <div>
-                            <p>Total Dose: {results.totalDose}</p>
-                            <p>Packs Needed:</p>
-                            <ul>
+                            <p className="text-lg font-semibold">Total Dose: {results.totalDose} {results.packsNeeded[0]?.units}</p>
+                            <p className="mt-4 font-medium">Packs Needed:</p>
+                            <ul className="list-disc list-inside mt-2">
                                 {results.packsNeeded.map((pack, index) => (
-                                    <li key={index}>{`${pack.packSize} ${pack.units}`}</li>
+                                    <li key={index} className="text-gray-700">
+                                        <span className="font-bold">{pack.quantity}</span> x {pack.packSize} {pack.units}
+                                    </li>
                                 ))}
                             </ul>
                         </div>
@@ -96,11 +98,11 @@ export const DosingCalculator: React.FC = () => {
             </div>
 
             <footer className="text-center mt-16">
-                <button 
+                <button
                     className="bg-red-500 text-white px-6 py-2 rounded-md mr-4"
                     onClick={handleResetClick}
                 >Reset</button>
-                <button 
+                <button
                     className="bg-blue-500 text-white px-6 py-2 rounded-md"
                     onClick={handleCalculateClick}
                 >Calculate</button>
