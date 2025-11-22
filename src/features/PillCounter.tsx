@@ -249,11 +249,20 @@ export const PillCounter: React.FC = () => {
                     <h2 className="text-3xl font-bold text-gray-800">
                         Count: <span className="text-blue-600">{points.length}</span>
                     </h2>
-                    <p className="text-sm text-gray-500 mt-2">
+                    <p className="text-sm text-gray-500 mt-2 mb-6">
                         {isCalibrating
                             ? "Click on a SINGLE pill to set the reference size."
                             : "Click on the image to add missed pills or remove incorrect ones."}
                     </p>
+
+                    {imageSrc && (
+                        <button
+                            onClick={handleRetake}
+                            className="bg-blue-600 text-white px-8 py-3 rounded-full text-lg font-bold shadow-lg hover:bg-blue-700 transition-transform hover:scale-105"
+                        >
+                            Count Next Tray
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
