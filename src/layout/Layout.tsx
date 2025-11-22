@@ -2,6 +2,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
+import logoRx from '../assets/logo_rx.svg';
+
 interface LayoutProps {
   children: React.ReactNode;
 }
@@ -12,7 +14,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Logo and Branding */}
       <header className="text-left py-6 ml-6 flex items-center">
         <Link to="/">
-          <img src="/src/assets/logo_rx.svg" alt="RXTools Logo" className="w-12 h-12 mr-2" />
+          <img src={logoRx} alt="RXTools Logo" className="w-12 h-12 mr-2" />
         </Link>
         <div className="flex flex-col justify-center">
           <h1 className="text-2xl font-extrabold text-blue-600 leading-none">RXTools</h1>
