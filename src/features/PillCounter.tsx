@@ -22,9 +22,15 @@ export const PillCounter: React.FC = () => {
     }, []);
 
     const startCamera = async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert("Camera API not supported in this browser. Please use a secure context (HTTPS) or a modern browser.");
+            return;
+        }
+
         try {
+            // Try environment camera first
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' } // Prefer back camera on mobile
+                video: { facingMode: 'environment' }
             });
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
@@ -32,8 +38,19 @@ export const PillCounter: React.FC = () => {
                 setIsCameraActive(true);
             }
         } catch (err) {
-            console.error("Error accessing camera:", err);
-            alert("Could not access camera. Please ensure you have granted permissions.");
+            console.warn("Environment camera failed, trying default...", err);
+            try {
+                // Fallback to any available camera
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    streamRef.current = stream;
+                    setIsCameraActive(true);
+                }
+            } catch (err2) {
+                console.error("Error accessing camera:", err2);
+                alert("Could not access camera. Please ensure you have granted permissions.");
+            }
         }
     };
 

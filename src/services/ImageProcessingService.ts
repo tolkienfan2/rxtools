@@ -39,45 +39,95 @@ export class ImageProcessingService {
         const width = imageData.width;
         const height = imageData.height;
         const binary = new Uint8ClampedArray(width * height);
+        const grays = new Uint8Array(width * height);
 
-        // Simple adaptive thresholding or fixed for now
-        // Let's assume pills are lighter than background for this iteration
-        // or we can try to detect contrast.
-        // Using a fixed threshold for simplicity in this version.
-        // In a real app, we'd use Otsu's method.
-
-        let sum = 0;
+        // 1. Convert to Grayscale
         for (let i = 0; i < data.length; i += 4) {
-            // Grayscale
-            const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-            sum += avg;
+            const avg = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+            grays[i / 4] = avg;
         }
-        const mean = sum / (width * height);
-        const threshold = mean; // Simple mean threshold
 
-        for (let i = 0; i < data.length; i += 4) {
-            const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-            const index = i / 4;
-            // Invert if background is light? 
-            // Let's assume high contrast.
-            binary[index] = avg > threshold ? 1 : 0; // 1 for object, 0 for background (assuming light pills)
-            // If we assume dark pills on light background, flip this.
-            // For now, we'll stick to this and maybe add a toggle or auto-detect.
+        // 2. Otsu's Method to find optimal threshold
+        const threshold = this.getOtsuThreshold(grays);
+
+        // 3. Create Binary Map
+        // We need to determine if pills are lighter or darker than background.
+        // Heuristic: Check the corners/borders. They are likely background.
+        let backgroundIsLight = 0;
+        const borderPixels = [
+            grays[0], grays[width - 1],
+            grays[width * (height - 1)], grays[width * height - 1]
+        ];
+        // Sample more border pixels
+        for (let x = 0; x < width; x += 10) {
+            if (grays[x] > threshold) backgroundIsLight++; else backgroundIsLight--;
+            if (grays[width * (height - 1) + x] > threshold) backgroundIsLight++; else backgroundIsLight--;
         }
+        for (let y = 0; y < height; y += 10) {
+            if (grays[y * width] > threshold) backgroundIsLight++; else backgroundIsLight--;
+            if (grays[y * width + width - 1] > threshold) backgroundIsLight++; else backgroundIsLight--;
+        }
+
+        const invert = backgroundIsLight > 0; // If background is light (> threshold), we want dark pixels (<= threshold) to be 1 (objects)
+
+        for (let i = 0; i < grays.length; i++) {
+            if (invert) {
+                binary[i] = grays[i] <= threshold ? 1 : 0;
+            } else {
+                binary[i] = grays[i] > threshold ? 1 : 0;
+            }
+        }
+
         return binary;
+    }
+
+    private getOtsuThreshold(grays: Uint8Array): number {
+        const histogram = new Array(256).fill(0);
+        for (let i = 0; i < grays.length; i++) {
+            histogram[grays[i]]++;
+        }
+
+        let total = grays.length;
+        let sum = 0;
+        for (let i = 0; i < 256; i++) sum += i * histogram[i];
+
+        let sumB = 0;
+        let wB = 0;
+        let wF = 0;
+        let maxVar = 0;
+        let threshold = 0;
+
+        for (let i = 0; i < 256; i++) {
+            wB += histogram[i];
+            if (wB === 0) continue;
+            wF = total - wB;
+            if (wF === 0) break;
+
+            sumB += i * histogram[i];
+            const mB = sumB / wB;
+            const mF = (sum - sumB) / wF;
+
+            const varBetween = wB * wF * (mB - mF) * (mB - mF);
+            if (varBetween > maxVar) {
+                maxVar = varBetween;
+                threshold = i;
+            }
+        }
+        return threshold;
     }
 
     private findBlobs(binary: Uint8ClampedArray, width: number, height: number): Point[] {
         const visited = new Uint8Array(width * height);
         const blobs: Point[] = [];
-        const minBlobSize = 50; // Minimum pixels to consider a pill
+        const minBlobSize = 30; // Slightly lower min size
+        const maxBlobSize = width * height * 0.5; // Ignore massive blobs (likely background errors)
 
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const idx = y * width + x;
                 if (binary[idx] === 1 && visited[idx] === 0) {
                     const { size, center } = this.floodFill(binary, visited, width, height, x, y);
-                    if (size > minBlobSize) {
+                    if (size > minBlobSize && size < maxBlobSize) {
                         blobs.push(center);
                     }
                 }
@@ -92,6 +142,7 @@ export class ImageProcessingService {
         let sumX = 0;
         let sumY = 0;
 
+        // Iterative flood fill to avoid stack overflow
         while (stack.length > 0) {
             const [x, y] = stack.pop()!;
             const idx = y * width + x;
@@ -105,10 +156,11 @@ export class ImageProcessingService {
             sumX += x;
             sumY += y;
 
-            stack.push([x + 1, y]);
-            stack.push([x - 1, y]);
-            stack.push([x, y + 1]);
-            stack.push([x, y - 1]);
+            // Push neighbors
+            if (x + 1 < width) stack.push([x + 1, y]);
+            if (x - 1 >= 0) stack.push([x - 1, y]);
+            if (y + 1 < height) stack.push([x, y + 1]);
+            if (y - 1 >= 0) stack.push([x, y - 1]);
         }
 
         return {
