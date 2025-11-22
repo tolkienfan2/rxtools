@@ -82,8 +82,9 @@ export class ImageProcessingService {
             }
         }
 
-        // 4. Erode to separate touching pills
-        const eroded = this.erode(binary, width, height);
+        // 4. Erode to separate touching pills (2 passes)
+        let eroded = this.erode(binary, width, height);
+        eroded = this.erode(eroded, width, height);
 
         return eroded;
     }
@@ -183,7 +184,7 @@ export class ImageProcessingService {
     private findBlobs(binary: Uint8ClampedArray, width: number, height: number): Point[] {
         const visited = new Uint8Array(width * height);
         const blobs: { size: number, center: Point }[] = [];
-        const minBlobSize = 100; // Minimum pixels to consider a pill (tuned down slightly from 150 to catch smaller pills)
+        const minBlobSize = 100;
         const maxBlobSize = width * height * 0.5;
 
         // 1. Find all blobs
@@ -201,31 +202,34 @@ export class ImageProcessingService {
 
         if (blobs.length === 0) return [];
 
-        // 2. Calculate Median Area
+        // 2. Calculate Reference Pill Size (25th Percentile)
+        // We use the 25th percentile instead of median to avoid skewing by clumps.
+        // If many pills are clumped, the median might represent a "double" pill.
+        // The 25th percentile is safer to find the "single unit" size.
         const sortedSizes = blobs.map(b => b.size).sort((a, b) => a - b);
-        const medianSize = sortedSizes[Math.floor(sortedSizes.length / 2)];
+        const referenceSize = sortedSizes[Math.floor(sortedSizes.length * 0.25)];
 
-        // Avoid division by zero or extremely small median
-        if (medianSize < minBlobSize) return blobs.map(b => b.center);
+        // Avoid division by zero or extremely small reference size
+        if (referenceSize < minBlobSize) return blobs.map(b => b.center);
 
         const finalPoints: Point[] = [];
 
         // 3. Generate Points based on Area
         blobs.forEach(blob => {
             // Calculate how many pills fit in this blob
-            // We use Math.round to find the closest integer multiple
-            let count = Math.round(blob.size / medianSize);
+            let count = Math.round(blob.size / referenceSize);
 
-            // Ensure at least 1 pill if it passed the minBlobSize check
+            // Heuristic: If it's a large blob but round() rounded down significantly (e.g. 1.6 -> 2), 
+            // we might want to be more aggressive. 
+            // But standard rounding is usually fair if referenceSize is correct.
+
             if (count < 1) count = 1;
 
-            // If it's a single pill, just add the center
             if (count === 1) {
                 finalPoints.push(blob.center);
             } else {
-                // If it's a clump, distribute points around the center
-                // This makes it obvious it counted multiple, and allows individual deletion
-                const radius = 15; // Distance from center
+                // Distribute points
+                const radius = 15;
                 for (let i = 0; i < count; i++) {
                     const angle = (i / count) * 2 * Math.PI;
                     finalPoints.push({
