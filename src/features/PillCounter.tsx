@@ -1,4 +1,3 @@
-```
 import React, { useState, useRef, useEffect } from "react";
 import { ImageProcessingService, Point, Blob } from "../services/ImageProcessingService";
 
@@ -10,7 +9,7 @@ export const PillCounter: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [isCalibrating, setIsCalibrating] = useState(false);
-    
+
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -31,8 +30,8 @@ export const PillCounter: React.FC = () => {
 
         try {
             // Try environment camera first
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'environment' } 
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' }
             });
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
@@ -70,7 +69,7 @@ export const PillCounter: React.FC = () => {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            
+
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -99,17 +98,17 @@ export const PillCounter: React.FC = () => {
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx?.drawImage(img, 0, 0);
-                
+
                 // Auto-process
                 setIsProcessing(true);
                 processingService.processImage(imageSrc).then((result) => {
                     setBlobs(result.blobs);
                     setReferenceSize(result.defaultReferenceSize);
-                    
+
                     // Initial calculation
                     const initialPoints = processingService.calculatePoints(result.blobs, result.defaultReferenceSize);
                     setPoints(initialPoints);
-                    
+
                     setIsProcessing(false);
                 });
             };
@@ -131,12 +130,12 @@ export const PillCounter: React.FC = () => {
         const img = new Image();
         img.onload = () => {
             ctx.drawImage(img, 0, 0);
-            
+
             // Draw points
             ctx.fillStyle = isCalibrating ? "rgba(255, 165, 0, 0.8)" : "red"; // Orange in calibration mode
             ctx.strokeStyle = "white";
             ctx.lineWidth = 2;
-            
+
             points.forEach(point => {
                 ctx.beginPath();
                 ctx.arc(point.x, point.y, 10, 0, 2 * Math.PI);
@@ -149,11 +148,11 @@ export const PillCounter: React.FC = () => {
 
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (!canvasRef.current) return;
-        
+
         const rect = canvasRef.current.getBoundingClientRect();
         const scaleX = canvasRef.current.width / rect.width;
         const scaleY = canvasRef.current.height / rect.height;
-        
+
         const x = (e.clientX - rect.left) * scaleX;
         const y = (e.clientY - rect.top) * scaleY;
 
@@ -172,12 +171,12 @@ export const PillCounter: React.FC = () => {
                 const newPoints = processingService.calculatePoints(blobs, clickedBlob.size);
                 setPoints(newPoints);
                 setIsCalibrating(false); // Exit calibration mode
-                alert(`Calibrated! Reference size set to ${ clickedBlob.size } pixels.`);
+                alert(`Calibrated! Reference size set to ${clickedBlob.size} pixels.`);
             }
         } else {
             // Normal add/remove logic
             const clickRadius = 20;
-            const existingPointIndex = points.findIndex(p => 
+            const existingPointIndex = points.findIndex(p =>
                 Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)) < clickRadius
             );
 
@@ -205,9 +204,9 @@ export const PillCounter: React.FC = () => {
                 <div className="relative overflow-hidden rounded-lg border-2 border-gray-200 bg-gray-100 min-h-[400px] flex items-center justify-center bg-black">
                     {!imageSrc ? (
                         <div className="relative w-full h-full flex flex-col items-center justify-center">
-                            <video 
+                            <video
                                 ref={videoRef}
-                                autoPlay 
+                                autoPlay
                                 playsInline
                                 className="max-w-full max-h-[70vh]"
                             />
@@ -223,10 +222,10 @@ export const PillCounter: React.FC = () => {
                         </div>
                     ) : (
                         <div className="relative">
-                            <canvas 
+                            <canvas
                                 ref={canvasRef}
                                 onClick={handleCanvasClick}
-                                className={`max - w - full h - auto ${ isCalibrating ? 'cursor-pointer' : 'cursor-crosshair' } `}
+                                className={`max - w - full h - auto ${isCalibrating ? 'cursor-pointer' : 'cursor-crosshair'} `}
                                 style={{ maxHeight: '70vh' }}
                             />
                             <button
@@ -238,11 +237,10 @@ export const PillCounter: React.FC = () => {
                             {!isProcessing && (
                                 <button
                                     onClick={() => setIsCalibrating(!isCalibrating)}
-                                    className={`absolute bottom - 4 right - 4 px - 4 py - 2 rounded - md shadow - md transition - colors ${
-    isCalibrating
-        ? 'bg-orange-500 text-white animate-pulse'
-        : 'bg-white text-gray-700 hover:bg-gray-100'
-} `}
+                                    className={`absolute bottom - 4 right - 4 px - 4 py - 2 rounded - md shadow - md transition - colors ${isCalibrating
+                                            ? 'bg-orange-500 text-white animate-pulse'
+                                            : 'bg-white text-gray-700 hover:bg-gray-100'
+                                        } `}
                                 >
                                     {isCalibrating ? 'Click a Single Pill' : 'Calibrate Size'}
                                 </button>
@@ -256,8 +254,8 @@ export const PillCounter: React.FC = () => {
                         Count: <span className="text-blue-600">{points.length}</span>
                     </h2>
                     <p className="text-sm text-gray-500 mt-2">
-                        {isCalibrating 
-                            ? "Click on a SINGLE pill to set the reference size." 
+                        {isCalibrating
+                            ? "Click on a SINGLE pill to set the reference size."
                             : "Click on the image to add missed pills or remove incorrect ones."}
                     </p>
                 </div>
@@ -265,4 +263,3 @@ export const PillCounter: React.FC = () => {
         </div>
     );
 };
-```
