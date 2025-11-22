@@ -46,12 +46,15 @@ export class ImageProcessingService {
             if (count === 1) {
                 points.push(blob.center);
             } else {
-                const radius = 15;
+                // Distribute points based on blob size
+                const blobRadius = Math.sqrt(blob.size / Math.PI);
+                const distributionRadius = blobRadius * 0.6; // Place points at 60% of radius
+
                 for (let i = 0; i < count; i++) {
                     const angle = (i / count) * 2 * Math.PI;
                     points.push({
-                        x: blob.center.x + radius * Math.cos(angle),
-                        y: blob.center.y + radius * Math.sin(angle)
+                        x: blob.center.x + distributionRadius * Math.cos(angle),
+                        y: blob.center.y + distributionRadius * Math.sin(angle)
                     });
                 }
             }
@@ -62,7 +65,10 @@ export class ImageProcessingService {
     private calculateModeSize(blobs: Blob[]): number {
         if (blobs.length === 0) return 0;
 
-        const bucketSize = 50;
+        // Dynamic bucket size based on average blob size to handle high-res images
+        const avgSize = blobs.reduce((sum, b) => sum + b.size, 0) / blobs.length;
+        const bucketSize = Math.max(50, Math.floor(avgSize / 20)); // e.g., if avg is 5000, bucket is 250
+
         const histogram = new Map<number, number>();
         let maxFrequency = 0;
         let modeSize = 0;
@@ -109,6 +115,7 @@ export class ImageProcessingService {
             grays[i / 4] = avg;
         }
 
+        // 1b. Gaussian Blur to reduce noise
         const blurred = this.gaussianBlur(grays, width, height);
 
         // 2. Otsu's Method to find optimal threshold
@@ -215,7 +222,12 @@ export class ImageProcessingService {
     private findBlobs(binary: Uint8ClampedArray, width: number, height: number): Blob[] {
         const visited = new Uint8Array(width * height);
         const blobs: Blob[] = [];
-        const minBlobSize = 100;
+
+        // Dynamic minBlobSize based on image resolution
+        // For 12MP (4000x3000), we want minSize ~2000.
+        // For 0.3MP (640x480), we want minSize ~60.
+        // Ratio: 1/6000 of total pixels seems reasonable.
+        const minBlobSize = Math.max(50, (width * height) / 6000);
         const maxBlobSize = width * height * 0.5;
 
         for (let y = 0; y < height; y++) {
