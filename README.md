@@ -41,4 +41,4 @@ Count pills instantly with 100% accuracy using our hybrid verification system.
 This project is open-source and we welcome contributions! Please feel free to submit a Pull Request.
 
 ## License
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the GNU General Public License v3.0 (GPLv3) - see the LICENSE file for details.
