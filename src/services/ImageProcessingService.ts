@@ -3,6 +3,13 @@ export interface Point {
     y: number;
 }
 
+export interface Blob {
+    size: number;
+    center: Point;
+    pixels: Point[]; // Optional: might be useful for precise clicking, but center + radius is usually enough.
+    // Actually, let's keep it simple for now.
+}
+
 export class ImageProcessingService {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
@@ -12,7 +19,7 @@ export class ImageProcessingService {
         this.ctx = this.canvas.getContext('2d')!;
     }
 
-    public async processImage(imageUrl: string): Promise<Point[]> {
+    public async processImage(imageUrl: string): Promise<{ blobs: Blob[], defaultReferenceSize: number }> {
         const img = await this.loadImage(imageUrl);
         this.canvas.width = img.width;
         this.canvas.height = img.height;
@@ -22,7 +29,62 @@ export class ImageProcessingService {
         const binary = this.thresholdImage(imageData);
         const blobs = this.findBlobs(binary, this.canvas.width, this.canvas.height);
 
-        return blobs;
+        // Calculate default reference size (Mode)
+        const defaultReferenceSize = this.calculateModeSize(blobs);
+
+        return { blobs, defaultReferenceSize };
+    }
+
+    public calculatePoints(blobs: Blob[], referenceSize: number): Point[] {
+        const points: Point[] = [];
+        if (referenceSize <= 0) return blobs.map(b => b.center);
+
+        blobs.forEach(blob => {
+            let count = Math.round(blob.size / referenceSize);
+            if (count < 1) count = 1;
+
+            if (count === 1) {
+                points.push(blob.center);
+            } else {
+                const radius = 15;
+                for (let i = 0; i < count; i++) {
+                    const angle = (i / count) * 2 * Math.PI;
+                    points.push({
+                        x: blob.center.x + radius * Math.cos(angle),
+                        y: blob.center.y + radius * Math.sin(angle)
+                    });
+                }
+            }
+        });
+        return points;
+    }
+
+    private calculateModeSize(blobs: Blob[]): number {
+        if (blobs.length === 0) return 0;
+
+        const bucketSize = 50;
+        const histogram = new Map<number, number>();
+        let maxFrequency = 0;
+        let modeSize = 0;
+
+        blobs.forEach(blob => {
+            const bucket = Math.floor(blob.size / bucketSize) * bucketSize;
+            const count = (histogram.get(bucket) || 0) + 1;
+            histogram.set(bucket, count);
+
+            if (count > maxFrequency) {
+                maxFrequency = count;
+                modeSize = bucket + (bucketSize / 2);
+            }
+        });
+
+        // Fallback to median
+        if (modeSize === 0) {
+            const sortedSizes = blobs.map(b => b.size).sort((a, b) => a - b);
+            modeSize = sortedSizes[Math.floor(sortedSizes.length / 2)];
+        }
+
+        return modeSize;
     }
 
     private loadImage(src: string): Promise<HTMLImageElement> {
@@ -47,16 +109,14 @@ export class ImageProcessingService {
             grays[i / 4] = avg;
         }
 
-        // 1b. Gaussian Blur to reduce noise
         const blurred = this.gaussianBlur(grays, width, height);
 
         // 2. Otsu's Method to find optimal threshold
         const threshold = this.getOtsuThreshold(blurred);
 
         // 3. Create Binary Map
-        // We need to determine if pills are lighter or darker than background.
-        // Heuristic: Check the corners/borders. They are likely background.
         let backgroundIsLight = 0;
+
         // Sample more border pixels
         for (let x = 0; x < width; x += 10) {
             if (blurred[x] > threshold) backgroundIsLight++; else backgroundIsLight--;
@@ -67,7 +127,7 @@ export class ImageProcessingService {
             if (blurred[y * width + width - 1] > threshold) backgroundIsLight++; else backgroundIsLight--;
         }
 
-        const invert = backgroundIsLight > 0; // If background is light (> threshold), we want dark pixels (<= threshold) to be 1 (objects)
+        const invert = backgroundIsLight > 0;
 
         for (let i = 0; i < blurred.length; i++) {
             if (invert) {
@@ -85,20 +145,11 @@ export class ImageProcessingService {
 
     private erode(binary: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
         const eroded = new Uint8ClampedArray(binary.length);
-        // Simple 3x3 structural element (cross shape)
-        //  0 1 0
-        //  1 1 1
-        //  0 1 0
-
         for (let y = 1; y < height - 1; y++) {
             for (let x = 1; x < width - 1; x++) {
                 const idx = y * width + x;
                 if (binary[idx] === 1) {
-                    // Check neighbors
-                    if (binary[idx - 1] === 1 &&       // Left
-                        binary[idx + 1] === 1 &&       // Right
-                        binary[idx - width] === 1 &&   // Top
-                        binary[idx + width] === 1) {   // Bottom
+                    if (binary[idx - 1] === 1 && binary[idx + 1] === 1 && binary[idx - width] === 1 && binary[idx + width] === 1) {
                         eroded[idx] = 1;
                     } else {
                         eroded[idx] = 0;
@@ -112,28 +163,19 @@ export class ImageProcessingService {
     private gaussianBlur(data: Uint8Array, width: number, height: number): Uint8Array {
         const output = new Uint8Array(data.length);
         // 3x3 Gaussian kernel approximation
-        // 1 2 1
-        // 2 4 2
-        // 1 2 1
-        // Divisor = 16
-
         for (let y = 1; y < height - 1; y++) {
             for (let x = 1; x < width - 1; x++) {
                 const idx = y * width + x;
-
                 let sum = 0;
                 sum += data[idx - width - 1] * 1;
                 sum += data[idx - width] * 2;
                 sum += data[idx - width + 1] * 1;
-
                 sum += data[idx - 1] * 2;
                 sum += data[idx] * 4;
                 sum += data[idx + 1] * 2;
-
                 sum += data[idx + width - 1] * 1;
                 sum += data[idx + width] * 2;
                 sum += data[idx + width + 1] * 1;
-
                 output[idx] = sum / 16;
             }
         }
@@ -145,27 +187,22 @@ export class ImageProcessingService {
         for (let i = 0; i < grays.length; i++) {
             histogram[grays[i]]++;
         }
-
         let total = grays.length;
         let sum = 0;
         for (let i = 0; i < 256; i++) sum += i * histogram[i];
-
         let sumB = 0;
         let wB = 0;
         let wF = 0;
         let maxVar = 0;
         let threshold = 0;
-
         for (let i = 0; i < 256; i++) {
             wB += histogram[i];
             if (wB === 0) continue;
             wF = total - wB;
             if (wF === 0) break;
-
             sumB += i * histogram[i];
             const mB = sumB / wB;
             const mF = (sum - sumB) / wF;
-
             const varBetween = wB * wF * (mB - mF) * (mB - mF);
             if (varBetween > maxVar) {
                 maxVar = varBetween;
@@ -175,13 +212,12 @@ export class ImageProcessingService {
         return threshold;
     }
 
-    private findBlobs(binary: Uint8ClampedArray, width: number, height: number): Point[] {
+    private findBlobs(binary: Uint8ClampedArray, width: number, height: number): Blob[] {
         const visited = new Uint8Array(width * height);
-        const blobs: { size: number, center: Point }[] = [];
+        const blobs: Blob[] = [];
         const minBlobSize = 100;
         const maxBlobSize = width * height * 0.5;
 
-        // 1. Find all blobs
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const idx = y * width + x;
@@ -193,79 +229,15 @@ export class ImageProcessingService {
                 }
             }
         }
-
-        if (blobs.length === 0) return [];
-
-        // 2. Calculate Reference Pill Size using Histogram (Mode)
-        // We create a histogram of sizes to find the "most common" size.
-        // This assumes that single pills are the most frequent object in the image.
-
-        // Bucket size for histogram (e.g., 50 pixels) to group similar sizes
-        const bucketSize = 50;
-        const histogram = new Map<number, number>();
-        let maxFrequency = 0;
-        let modeSize = 0;
-
-        blobs.forEach(blob => {
-            const bucket = Math.floor(blob.size / bucketSize) * bucketSize;
-            const count = (histogram.get(bucket) || 0) + 1;
-            histogram.set(bucket, count);
-
-            if (count > maxFrequency) {
-                maxFrequency = count;
-                modeSize = bucket + (bucketSize / 2); // Use center of bucket
-            }
-        });
-
-        // Fallback if mode is too small (noise) or undefined
-        if (modeSize < minBlobSize) {
-            // Fallback to median if histogram fails
-            const sortedSizes = blobs.map(b => b.size).sort((a, b) => a - b);
-            modeSize = sortedSizes[Math.floor(sortedSizes.length / 2)];
-        }
-
-        const referenceSize = modeSize;
-
-        if (referenceSize < minBlobSize) return blobs.map(b => b.center);
-
-        const finalPoints: Point[] = [];
-
-        // 3. Generate Points based on Area
-        blobs.forEach(blob => {
-            // Calculate how many pills fit in this blob
-            let count = Math.round(blob.size / referenceSize);
-
-            // Heuristic: If it's a large blob but round() rounded down significantly (e.g. 1.6 -> 2), 
-            // we might want to be more aggressive. 
-            // But standard rounding is usually fair if referenceSize is correct.
-
-            if (count < 1) count = 1;
-
-            if (count === 1) {
-                finalPoints.push(blob.center);
-            } else {
-                // Distribute points
-                const radius = 15;
-                for (let i = 0; i < count; i++) {
-                    const angle = (i / count) * 2 * Math.PI;
-                    finalPoints.push({
-                        x: blob.center.x + radius * Math.cos(angle),
-                        y: blob.center.y + radius * Math.sin(angle)
-                    });
-                }
-            }
-        });
-
-        return finalPoints;
+        return blobs;
     }
 
-    private floodFill(binary: Uint8ClampedArray, visited: Uint8Array, width: number, height: number, startX: number, startY: number) {
+    private floodFill(binary: Uint8ClampedArray, visited: Uint8Array, width: number, height: number, startX: number, startY: number): Blob {
         const stack = [[startX, startY]];
         let size = 0;
         let sumX = 0;
         let sumY = 0;
 
-        // Iterative flood fill to avoid stack overflow
         while (stack.length > 0) {
             const [x, y] = stack.pop()!;
             const idx = y * width + x;
@@ -279,7 +251,6 @@ export class ImageProcessingService {
             sumX += x;
             sumY += y;
 
-            // Push neighbors
             if (x + 1 < width) stack.push([x + 1, y]);
             if (x - 1 >= 0) stack.push([x - 1, y]);
             if (y + 1 < height) stack.push([x, y + 1]);
@@ -288,7 +259,8 @@ export class ImageProcessingService {
 
         return {
             size,
-            center: { x: sumX / size, y: sumY / size }
+            center: { x: sumX / size, y: sumY / size },
+            pixels: [] // Not storing pixels for now to save memory
         };
     }
 }

@@ -1,15 +1,19 @@
+```
 import React, { useState, useRef, useEffect } from "react";
-import { ImageProcessingService, Point } from "../services/ImageProcessingService";
+import { ImageProcessingService, Point, Blob } from "../services/ImageProcessingService";
 
 type InputMode = 'upload' | 'camera';
 
 export const PillCounter: React.FC = () => {
     const [imageSrc, setImageSrc] = useState<string | null>(null);
     const [points, setPoints] = useState<Point[]>([]);
+    const [blobs, setBlobs] = useState<Blob[]>([]);
+    const [referenceSize, setReferenceSize] = useState<number>(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [mode, setMode] = useState<InputMode>('upload');
     const [isCameraActive, setIsCameraActive] = useState(false);
-
+    const [isCalibrating, setIsCalibrating] = useState(false);
+    
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -29,8 +33,8 @@ export const PillCounter: React.FC = () => {
 
         try {
             // Try environment camera first
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' }
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment' } 
             });
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
@@ -66,6 +70,9 @@ export const PillCounter: React.FC = () => {
         setMode(newMode);
         setImageSrc(null);
         setPoints([]);
+        setBlobs([]);
+        setReferenceSize(0);
+        setIsCalibrating(false);
         if (newMode === 'camera') {
             startCamera();
         } else {
@@ -79,7 +86,7 @@ export const PillCounter: React.FC = () => {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-
+            
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -93,6 +100,9 @@ export const PillCounter: React.FC = () => {
     const handleRetake = () => {
         setImageSrc(null);
         setPoints([]);
+        setBlobs([]);
+        setReferenceSize(0);
+        setIsCalibrating(false);
         startCamera();
     };
 
@@ -104,6 +114,8 @@ export const PillCounter: React.FC = () => {
                 if (event.target?.result) {
                     setImageSrc(event.target.result as string);
                     setPoints([]); // Reset points for new image
+                    setBlobs([]);
+                    setReferenceSize(0);
                 }
             };
             reader.readAsDataURL(file);
@@ -119,12 +131,17 @@ export const PillCounter: React.FC = () => {
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx?.drawImage(img, 0, 0);
-                drawPoints();
-
+                
                 // Auto-process
                 setIsProcessing(true);
-                processingService.processImage(imageSrc).then((detectedPoints) => {
-                    setPoints(detectedPoints);
+                processingService.processImage(imageSrc).then((result) => {
+                    setBlobs(result.blobs);
+                    setReferenceSize(result.defaultReferenceSize);
+                    
+                    // Initial calculation
+                    const initialPoints = processingService.calculatePoints(result.blobs, result.defaultReferenceSize);
+                    setPoints(initialPoints);
+                    
                     setIsProcessing(false);
                 });
             };
@@ -132,9 +149,10 @@ export const PillCounter: React.FC = () => {
         }
     }, [imageSrc]);
 
+    // Redraw when points or calibration mode changes
     useEffect(() => {
         drawPoints();
-    }, [points]);
+    }, [points, isCalibrating]);
 
     const drawPoints = () => {
         if (!canvasRef.current || !imageSrc) return;
@@ -142,16 +160,15 @@ export const PillCounter: React.FC = () => {
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        // Redraw image first to clear previous points
         const img = new Image();
         img.onload = () => {
             ctx.drawImage(img, 0, 0);
-
+            
             // Draw points
-            ctx.fillStyle = "red";
+            ctx.fillStyle = isCalibrating ? "rgba(255, 165, 0, 0.8)" : "red"; // Orange in calibration mode
             ctx.strokeStyle = "white";
             ctx.lineWidth = 2;
-
+            
             points.forEach(point => {
                 ctx.beginPath();
                 ctx.arc(point.x, point.y, 10, 0, 2 * Math.PI);
@@ -164,26 +181,45 @@ export const PillCounter: React.FC = () => {
 
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (!canvasRef.current) return;
-
+        
         const rect = canvasRef.current.getBoundingClientRect();
         const scaleX = canvasRef.current.width / rect.width;
         const scaleY = canvasRef.current.height / rect.height;
-
+        
         const x = (e.clientX - rect.left) * scaleX;
         const y = (e.clientY - rect.top) * scaleY;
 
-        // Check if clicking on existing point to remove it
-        const clickRadius = 20;
-        const existingPointIndex = points.findIndex(p =>
-            Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)) < clickRadius
-        );
+        if (isCalibrating) {
+            // Find blob under click
+            const clickedBlob = blobs.find(b => {
+                const dist = Math.sqrt(Math.pow(b.center.x - x, 2) + Math.pow(b.center.y - y, 2));
+                // Simple distance check to center - could be improved with pixel check but this is usually enough
+                // Assuming blob radius roughly corresponds to size
+                const approxRadius = Math.sqrt(b.size / Math.PI);
+                return dist < approxRadius * 1.5; // Generous hit area
+            });
 
-        if (existingPointIndex >= 0) {
-            const newPoints = [...points];
-            newPoints.splice(existingPointIndex, 1);
-            setPoints(newPoints);
+            if (clickedBlob) {
+                setReferenceSize(clickedBlob.size);
+                const newPoints = processingService.calculatePoints(blobs, clickedBlob.size);
+                setPoints(newPoints);
+                setIsCalibrating(false); // Exit calibration mode
+                alert(`Calibrated! Reference size set to ${ clickedBlob.size } pixels.`);
+            }
         } else {
-            setPoints([...points, { x, y }]);
+            // Normal add/remove logic
+            const clickRadius = 20;
+            const existingPointIndex = points.findIndex(p => 
+                Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)) < clickRadius
+            );
+
+            if (existingPointIndex >= 0) {
+                const newPoints = [...points];
+                newPoints.splice(existingPointIndex, 1);
+                setPoints(newPoints);
+            } else {
+                setPoints([...points, { x, y }]);
+            }
         }
     };
 
@@ -198,15 +234,17 @@ export const PillCounter: React.FC = () => {
                 {/* Mode Toggle */}
                 <div className="flex justify-center mb-6 space-x-4">
                     <button
-                        className={`px-4 py-2 rounded-full font-semibold transition-colors ${mode === 'upload' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
+                        className={`px - 4 py - 2 rounded - full font - semibold transition - colors ${
+    mode === 'upload' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+} `}
                         onClick={() => handleModeChange('upload')}
                     >
                         Upload Photo
                     </button>
                     <button
-                        className={`px-4 py-2 rounded-full font-semibold transition-colors ${mode === 'camera' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
+                        className={`px - 4 py - 2 rounded - full font - semibold transition - colors ${
+    mode === 'camera' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+} `}
                         onClick={() => handleModeChange('camera')}
                     >
                         Use Camera
@@ -216,9 +254,9 @@ export const PillCounter: React.FC = () => {
                 {/* Input Area */}
                 <div className="mb-6 text-center">
                     {mode === 'upload' && (
-                        <input
-                            type="file"
-                            accept="image/*"
+                        <input 
+                            type="file" 
+                            accept="image/*" 
                             onChange={handleImageUpload}
                             className="block w-full text-sm text-gray-500
                                 file:mr-4 file:py-2 file:px-4
@@ -236,9 +274,9 @@ export const PillCounter: React.FC = () => {
                 <div className="relative overflow-hidden rounded-lg border-2 border-gray-200 bg-gray-100 min-h-[400px] flex items-center justify-center bg-black">
                     {mode === 'camera' && !imageSrc ? (
                         <div className="relative w-full h-full flex flex-col items-center justify-center">
-                            <video
+                            <video 
                                 ref={videoRef}
-                                autoPlay
+                                autoPlay 
                                 playsInline
                                 className="max-w-full max-h-[70vh]"
                             />
@@ -255,10 +293,10 @@ export const PillCounter: React.FC = () => {
                     ) : (
                         imageSrc ? (
                             <div className="relative">
-                                <canvas
+                                <canvas 
                                     ref={canvasRef}
                                     onClick={handleCanvasClick}
-                                    className="max-w-full h-auto cursor-crosshair"
+                                    className={`max - w - full h - auto ${ isCalibrating ? 'cursor-pointer' : 'cursor-crosshair' } `}
                                     style={{ maxHeight: '70vh' }}
                                 />
                                 {mode === 'camera' && (
@@ -267,6 +305,18 @@ export const PillCounter: React.FC = () => {
                                         className="absolute top-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-md opacity-75 hover:opacity-100"
                                     >
                                         Retake
+                                    </button>
+                                )}
+                                {imageSrc && !isProcessing && (
+                                    <button
+                                        onClick={() => setIsCalibrating(!isCalibrating)}
+                                        className={`absolute bottom - 4 right - 4 px - 4 py - 2 rounded - md shadow - md transition - colors ${
+    isCalibrating
+        ? 'bg-orange-500 text-white animate-pulse'
+        : 'bg-white text-gray-700 hover:bg-gray-100'
+} `}
+                                    >
+                                        {isCalibrating ? 'Click a Single Pill' : 'Calibrate Size'}
                                     </button>
                                 )}
                             </div>
@@ -283,10 +333,13 @@ export const PillCounter: React.FC = () => {
                         Count: <span className="text-blue-600">{points.length}</span>
                     </h2>
                     <p className="text-sm text-gray-500 mt-2">
-                        Click on the image to add missed pills or remove incorrect ones.
+                        {isCalibrating 
+                            ? "Click on a SINGLE pill to set the reference size." 
+                            : "Click on the image to add missed pills or remove incorrect ones."}
                     </p>
                 </div>
             </div>
         </div>
     );
 };
+```
