@@ -2,15 +2,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ImageProcessingService, Point, Blob } from "../services/ImageProcessingService";
 
-type InputMode = 'upload' | 'camera';
-
 export const PillCounter: React.FC = () => {
     const [imageSrc, setImageSrc] = useState<string | null>(null);
     const [points, setPoints] = useState<Point[]>([]);
     const [blobs, setBlobs] = useState<Blob[]>([]);
     const [referenceSize, setReferenceSize] = useState<number>(0);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [mode, setMode] = useState<InputMode>('upload');
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [isCalibrating, setIsCalibrating] = useState(false);
     
@@ -20,6 +17,7 @@ export const PillCounter: React.FC = () => {
     const [processingService] = useState(new ImageProcessingService());
 
     useEffect(() => {
+        startCamera();
         return () => {
             stopCamera();
         };
@@ -66,20 +64,6 @@ export const PillCounter: React.FC = () => {
         }
     };
 
-    const handleModeChange = (newMode: InputMode) => {
-        setMode(newMode);
-        setImageSrc(null);
-        setPoints([]);
-        setBlobs([]);
-        setReferenceSize(0);
-        setIsCalibrating(false);
-        if (newMode === 'camera') {
-            startCamera();
-        } else {
-            stopCamera();
-        }
-    };
-
     const handleCapture = () => {
         if (videoRef.current) {
             const video = videoRef.current;
@@ -104,22 +88,6 @@ export const PillCounter: React.FC = () => {
         setReferenceSize(0);
         setIsCalibrating(false);
         startCamera();
-    };
-
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                if (event.target?.result) {
-                    setImageSrc(event.target.result as string);
-                    setPoints([]); // Reset points for new image
-                    setBlobs([]);
-                    setReferenceSize(0);
-                }
-            };
-            reader.readAsDataURL(file);
-        }
     };
 
     useEffect(() => {
@@ -231,48 +199,11 @@ export const PillCounter: React.FC = () => {
             </header>
 
             <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
-                {/* Mode Toggle */}
-                <div className="flex justify-center mb-6 space-x-4">
-                    <button
-                        className={`px - 4 py - 2 rounded - full font - semibold transition - colors ${
-    mode === 'upload' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-} `}
-                        onClick={() => handleModeChange('upload')}
-                    >
-                        Upload Photo
-                    </button>
-                    <button
-                        className={`px - 4 py - 2 rounded - full font - semibold transition - colors ${
-    mode === 'camera' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-} `}
-                        onClick={() => handleModeChange('camera')}
-                    >
-                        Use Camera
-                    </button>
-                </div>
-
-                {/* Input Area */}
-                <div className="mb-6 text-center">
-                    {mode === 'upload' && (
-                        <input 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={handleImageUpload}
-                            className="block w-full text-sm text-gray-500
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded-full file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-blue-50 file:text-blue-700
-                                hover:file:bg-blue-100"
-                        />
-                    )}
-                </div>
-
                 {isProcessing && <p className="text-center text-blue-500 font-semibold mb-4">Processing image...</p>}
 
                 {/* Main Display Area */}
                 <div className="relative overflow-hidden rounded-lg border-2 border-gray-200 bg-gray-100 min-h-[400px] flex items-center justify-center bg-black">
-                    {mode === 'camera' && !imageSrc ? (
+                    {!imageSrc ? (
                         <div className="relative w-full h-full flex flex-col items-center justify-center">
                             <video 
                                 ref={videoRef}
@@ -291,40 +222,32 @@ export const PillCounter: React.FC = () => {
                             )}
                         </div>
                     ) : (
-                        imageSrc ? (
-                            <div className="relative">
-                                <canvas 
-                                    ref={canvasRef}
-                                    onClick={handleCanvasClick}
-                                    className={`max - w - full h - auto ${ isCalibrating ? 'cursor-pointer' : 'cursor-crosshair' } `}
-                                    style={{ maxHeight: '70vh' }}
-                                />
-                                {mode === 'camera' && (
-                                    <button
-                                        onClick={handleRetake}
-                                        className="absolute top-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-md opacity-75 hover:opacity-100"
-                                    >
-                                        Retake
-                                    </button>
-                                )}
-                                {imageSrc && !isProcessing && (
-                                    <button
-                                        onClick={() => setIsCalibrating(!isCalibrating)}
-                                        className={`absolute bottom - 4 right - 4 px - 4 py - 2 rounded - md shadow - md transition - colors ${
+                        <div className="relative">
+                            <canvas 
+                                ref={canvasRef}
+                                onClick={handleCanvasClick}
+                                className={`max - w - full h - auto ${ isCalibrating ? 'cursor-pointer' : 'cursor-crosshair' } `}
+                                style={{ maxHeight: '70vh' }}
+                            />
+                            <button
+                                onClick={handleRetake}
+                                className="absolute top-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-md opacity-75 hover:opacity-100"
+                            >
+                                Retake
+                            </button>
+                            {!isProcessing && (
+                                <button
+                                    onClick={() => setIsCalibrating(!isCalibrating)}
+                                    className={`absolute bottom - 4 right - 4 px - 4 py - 2 rounded - md shadow - md transition - colors ${
     isCalibrating
         ? 'bg-orange-500 text-white animate-pulse'
         : 'bg-white text-gray-700 hover:bg-gray-100'
 } `}
-                                    >
-                                        {isCalibrating ? 'Click a Single Pill' : 'Calibrate Size'}
-                                    </button>
-                                )}
-                            </div>
-                        ) : (
-                            <p className="text-gray-400">
-                                {mode === 'upload' ? 'No image uploaded' : 'Camera inactive'}
-                            </p>
-                        )
+                                >
+                                    {isCalibrating ? 'Click a Single Pill' : 'Calibrate Size'}
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
 
