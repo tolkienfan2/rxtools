@@ -224,14 +224,21 @@ export class ImageProcessingService {
         const blobs: Blob[] = [];
 
         // Dynamic minBlobSize based on image resolution
-        // For 12MP (4000x3000), we want minSize ~2000.
-        // For 0.3MP (640x480), we want minSize ~60.
-        // Ratio: 1/6000 of total pixels seems reasonable.
-        const minBlobSize = Math.max(50, (width * height) / 6000);
+        // Increased threshold to filter out noise more aggressively.
+        // Ratio: 1/2000 of total pixels (e.g., ~1000px for 1080p, ~6000px for 12MP)
+        const minBlobSize = Math.max(100, (width * height) / 2000);
         const maxBlobSize = width * height * 0.5;
+
+        // Mask out borders to prevent edge artifacts
+        const borderMargin = Math.floor(Math.min(width, height) * 0.05); // 5% margin
 
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
+                // Skip border pixels
+                if (x < borderMargin || x > width - borderMargin || y < borderMargin || y > height - borderMargin) {
+                    continue;
+                }
+
                 const idx = y * width + x;
                 if (binary[idx] === 1 && visited[idx] === 0) {
                     const blob = this.floodFill(binary, visited, width, height, x, y);
