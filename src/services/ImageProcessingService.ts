@@ -57,11 +57,6 @@ export class ImageProcessingService {
         // We need to determine if pills are lighter or darker than background.
         // Heuristic: Check the corners/borders. They are likely background.
         let backgroundIsLight = 0;
-        // Sample corners of blurred image
-        const borderPixels = [
-            blurred[0], blurred[width - 1],
-            blurred[width * (height - 1)], blurred[width * height - 1]
-        ];
         // Sample more border pixels
         for (let x = 0; x < width; x += 10) {
             if (blurred[x] > threshold) backgroundIsLight++; else backgroundIsLight--;
@@ -82,9 +77,8 @@ export class ImageProcessingService {
             }
         }
 
-        // 4. Erode to separate touching pills (2 passes)
-        let eroded = this.erode(binary, width, height);
-        eroded = this.erode(eroded, width, height);
+        // 4. Erode to separate touching pills (Single pass)
+        const eroded = this.erode(binary, width, height);
 
         return eroded;
     }
@@ -202,14 +196,36 @@ export class ImageProcessingService {
 
         if (blobs.length === 0) return [];
 
-        // 2. Calculate Reference Pill Size (25th Percentile)
-        // We use the 25th percentile instead of median to avoid skewing by clumps.
-        // If many pills are clumped, the median might represent a "double" pill.
-        // The 25th percentile is safer to find the "single unit" size.
-        const sortedSizes = blobs.map(b => b.size).sort((a, b) => a - b);
-        const referenceSize = sortedSizes[Math.floor(sortedSizes.length * 0.25)];
+        // 2. Calculate Reference Pill Size using Histogram (Mode)
+        // We create a histogram of sizes to find the "most common" size.
+        // This assumes that single pills are the most frequent object in the image.
 
-        // Avoid division by zero or extremely small reference size
+        // Bucket size for histogram (e.g., 50 pixels) to group similar sizes
+        const bucketSize = 50;
+        const histogram = new Map<number, number>();
+        let maxFrequency = 0;
+        let modeSize = 0;
+
+        blobs.forEach(blob => {
+            const bucket = Math.floor(blob.size / bucketSize) * bucketSize;
+            const count = (histogram.get(bucket) || 0) + 1;
+            histogram.set(bucket, count);
+
+            if (count > maxFrequency) {
+                maxFrequency = count;
+                modeSize = bucket + (bucketSize / 2); // Use center of bucket
+            }
+        });
+
+        // Fallback if mode is too small (noise) or undefined
+        if (modeSize < minBlobSize) {
+            // Fallback to median if histogram fails
+            const sortedSizes = blobs.map(b => b.size).sort((a, b) => a - b);
+            modeSize = sortedSizes[Math.floor(sortedSizes.length / 2)];
+        }
+
+        const referenceSize = modeSize;
+
         if (referenceSize < minBlobSize) return blobs.map(b => b.center);
 
         const finalPoints: Point[] = [];
